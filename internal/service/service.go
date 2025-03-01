@@ -35,7 +35,7 @@ type service struct {
 	accrual accrualclient.AccrualClient
 }
 
-func NewService(cfg config.Config, store store.Store) Service {
+func NewService(cfg config.Config, store store.Store) (Service, error) {
 	balance := balance.NewBalance(store)
 	accrual := accrualclient.NewAccrualClient(cfg.AccrualAddr)
 
@@ -45,7 +45,7 @@ func NewService(cfg config.Config, store store.Store) Service {
 		balance: balance,
 		accrual: accrual}
 
-	return &service
+	return &service, nil
 }
 
 func (service *service) PostOrder(order model.PurchaseOrder) error {

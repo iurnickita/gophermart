@@ -30,10 +30,15 @@ func run() error {
 		return err
 	}
 
-	auth := auth.NewAuth(store)
-	service := service.NewService(cfg.Service, store)
+	auth, err := auth.NewAuth(store)
+	if err != nil {
+		return err
+	}
+
+	service, err := service.NewService(cfg.Service, store)
+	if err != nil {
+		return err
+	}
 
 	return handler.Serve(cfg.Handler, auth, service, zaplog)
 }
-
-//*изменение в коде для создания ветки и пул реквеста*

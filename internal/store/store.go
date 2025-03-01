@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"strconv"
 	"sync"
 	"time"
 
@@ -12,6 +13,8 @@ import (
 )
 
 type Store interface {
+	AuthRegister(ctx context.Context, login string, password string) (string, error)
+	AuthLogin(ctx context.Context, login string, password string) (string, error)
 	BalanceGetActual(ctx context.Context, customer string) (model.Balance, error)
 	BalanceGetWithdrawals(ctx context.Context, customer string) ([]model.Balance, error)
 	BalanceGetHistory(ctx context.Context, customer string) ([]model.Balance, error)
@@ -23,6 +26,7 @@ type Store interface {
 }
 
 var (
+	ErrNoRows            = errors.New("no rows")
 	ErrAlreadyExists     = errors.New("already exists")
 	ErrDuplicateRequest  = errors.New("duplicate request")
 	ErrPointsIncorrect   = errors.New("points value is incorrect")
@@ -36,6 +40,17 @@ type store struct {
 
 func NewStore(cfg config.Config) (Store, error) {
 	db, err := sql.Open("pgx", cfg.DBDsn)
+	if err != nil {
+		return nil, err
+	}
+
+	// Таблица учетных записей
+	_, err = db.Exec(
+		"CREATE TABLE IF NOT EXISTS auth (" +
+			" uuid SERIAL PRIMARY KEY," +
+			" login VARCHAR (20) NOT NULL," +
+			" password VARCHAR (20) NOT NULL," +
+			" );")
 	if err != nil {
 		return nil, err
 	}
@@ -76,6 +91,53 @@ func NewStore(cfg config.Config) (Store, error) {
 	return &store{
 		database: db,
 	}, nil
+}
+
+func (store *store) AuthRegister(ctx context.Context, login string, password string) (string, error) {
+	// Запись нового пользователя
+	row := store.database.QueryRowContext(ctx,
+		"INSERT INTO auth (login, password)"+
+			" VALUES (&1, &2)"+
+			" RETURNING uuid",
+		login,
+		password)
+
+	// Получение ID пользователя
+	var uuid int
+	err := row.Scan(&uuid)
+	if err != nil {
+		// Проверка: уже существует
+		row := store.database.QueryRowContext(ctx,
+			"SELECT uuid FROM auth"+
+				" WHERE login = $1",
+			login)
+		if err2 := row.Scan(); err2 == nil {
+			return "", ErrAlreadyExists
+		}
+
+		return "", err
+	}
+
+	return strconv.Itoa(uuid), nil
+}
+
+func (store *store) AuthLogin(ctx context.Context, login string, password string) (string, error) {
+
+	// Получение ID пользователя
+	row := store.database.QueryRowContext(ctx,
+		"SELECT uuid FROM auth"+
+			" WHERE login = $1",
+		login)
+	var uuid int
+	err := row.Scan(&uuid)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return "", ErrNoRows
+		}
+		return "", err
+	}
+
+	return strconv.Itoa(uuid), nil
 }
 
 func (store *store) BalanceGetActual(ctx context.Context, customer string) (model.Balance, error) {

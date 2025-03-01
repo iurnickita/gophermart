@@ -64,7 +64,7 @@ func (h *handler) PostOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	order := model.PurchaseOrder{Number: string(number),
 		Data: model.PurchaseOrderData{Customer: userCode}}
@@ -95,7 +95,7 @@ type GetOrderJSONResponse struct {
 }
 
 func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	orders, err := h.service.GetOrder(userCode)
 	if err != nil {
@@ -130,7 +130,7 @@ type GetBalanceJSONResponse struct {
 }
 
 func (h *handler) GetBalance(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	balance, err := h.service.GetBalance(userCode)
 	if err != nil {
@@ -169,7 +169,7 @@ func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	order := model.PurchaseOrder{
 		Number: withdrawJSON.Order,
@@ -195,7 +195,7 @@ type GetWithdrawalsJSONResponse struct {
 }
 
 func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	withdrawals, err := h.service.GetWithdrawals(userCode)
 	if err != nil {
