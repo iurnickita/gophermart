@@ -42,3 +42,5 @@ func run() error {
 
 	return handler.Serve(cfg.Handler, auth, service, zaplog)
 }
+
+// curl -v -X POST --json '{"login": "Pier123", "password": "Pier123"}' http://localhost:8080/api/user/register

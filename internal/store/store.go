@@ -8,6 +8,8 @@ import (
 	"sync"
 	"time"
 
+	_ "github.com/jackc/pgx/v5/stdlib"
+
 	"github.com/iurnickita/gophermart/internal/model"
 	"github.com/iurnickita/gophermart/internal/store/config"
 )
@@ -49,7 +51,7 @@ func NewStore(cfg config.Config) (Store, error) {
 		"CREATE TABLE IF NOT EXISTS auth (" +
 			" uuid SERIAL PRIMARY KEY," +
 			" login VARCHAR (20) NOT NULL," +
-			" password VARCHAR (20) NOT NULL," +
+			" password VARCHAR (20) NOT NULL" +
 			" );")
 	if err != nil {
 		return nil, err
@@ -62,13 +64,14 @@ func NewStore(cfg config.Config) (Store, error) {
 	// [не реализовано] Записи нельзя редактировать/удалять
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS balance (" +
-			" customer VARCHAR (10) PRIMARY KEY," +
-			" operation SERIAL PRIMARY KEY," +
+			" customer VARCHAR (10)," +
+			" operation SERIAL," +
 			" timestamp TIMESTAMP NOT NULL," +
 			" difference INTEGER NOT NULL," +
 			" balance INTEGER," +
 			" withdrawn INTEGER," +
-			" order VARCHAR (10) NOT NULL" +
+			" purchase_order VARCHAR (10) NOT NULL," +
+			" PRIMARY KEY (customer, operation)" +
 			" );")
 	if err != nil {
 		return nil, err
@@ -82,7 +85,7 @@ func NewStore(cfg config.Config) (Store, error) {
 			" customer VARCHAR (10) NOT NULL," +
 			" status VARCHAR (10) NOT NULL," +
 			" accrual INTEGER NOT NULL," +
-			" uploaded_at TIMESTAMP NOT NULL," +
+			" uploaded_at TIMESTAMP NOT NULL" +
 			" );")
 	if err != nil {
 		return nil, err
@@ -97,7 +100,7 @@ func (store *store) AuthRegister(ctx context.Context, login string, password str
 	// Запись нового пользователя
 	row := store.database.QueryRowContext(ctx,
 		"INSERT INTO auth (login, password)"+
-			" VALUES (&1, &2)"+
+			" VALUES ($1, $2)"+
 			" RETURNING uuid",
 		login,
 		password)
@@ -144,7 +147,7 @@ func (store *store) BalanceGetActual(ctx context.Context, customer string) (mode
 	//Получение актуального баланса
 	var balanceRow model.Balance
 	row := store.database.QueryRowContext(ctx,
-		"SELECT customer, operation, timestamp, difference, balance, withdrawn, order"+
+		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
 			" FROM balance ORDER BY operation"+
 			" WHERE customer = $1"+
 			" LIMIT 1",
@@ -165,7 +168,7 @@ func (store *store) BalanceGetActual(ctx context.Context, customer string) (mode
 func (store *store) BalanceGetWithdrawals(ctx context.Context, customer string) ([]model.Balance, error) {
 	//Получение списаний
 	rows, err := store.database.QueryContext(ctx,
-		"SELECT customer, operation, timestamp, difference, balance, withdrawn, order"+
+		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
 			" FROM balance ORDER BY operation"+
 			" WHERE customer = $1"+
 			"   AND difference < 0"+
@@ -222,8 +225,8 @@ func (store store) BalanceIncrease(ctx context.Context, customer string, order s
 	//balanceRow.Data.Withdrawn
 	balanceRow.Data.Order = order
 	_, err = store.database.ExecContext(ctx,
-		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, order)"+
-			" VALUES (&1, &2, &3, &4, &5, &6)",
+		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+			" VALUES ($1, $2, $3, $4, $5, $6)",
 		balanceRow.Key.Customer,
 		balanceRow.Data.Timestamp,
 		balanceRow.Data.Difference,
@@ -250,7 +253,7 @@ func (store *store) BalanceDecrease(ctx context.Context, customer string, order 
 	//Получение актуального баланса
 	var balanceRow model.Balance
 	row := store.database.QueryRowContext(ctx,
-		"SELECT customer, operation, timestamp, difference, balance, withdrawn, order"+
+		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
 			" FROM balance ORDER BY operation"+
 			" WHERE customer = $1"+
 			" LIMIT 1",
@@ -279,8 +282,8 @@ func (store *store) BalanceDecrease(ctx context.Context, customer string, order 
 	balanceRow.Data.Withdrawn += points
 	balanceRow.Data.Order = order
 	_, err = store.database.ExecContext(ctx,
-		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, order)"+
-			" VALUES (&1, &2, &3, &4, &5, &6)",
+		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+			" VALUES ($1, $2, $3, $4, $5, $6)",
 		balanceRow.Key.Customer,
 		balanceRow.Data.Timestamp,
 		balanceRow.Data.Difference,
@@ -298,7 +301,7 @@ func (store *store) PurchaseOrderPost(ctx context.Context, order model.PurchaseO
 	//Запись нового заказа
 	_, err := store.database.ExecContext(ctx,
 		"INSERT INTO purchase_order (number, customer, status, accrual, uploaded_at)"+
-			" VALUES (&1, &2, &3, &4, &5)",
+			" VALUES ($1, $2, $3, $4, $5)",
 		order.Number,
 		order.Data.Customer,
 		order.Data.Status,

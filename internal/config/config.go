@@ -35,5 +35,9 @@ func GetConfig() Config {
 		cfg.Service.AccrualAddr = envaccr
 	}
 
+	if cfg.Store.DBDsn == "" {
+		cfg.Store.DBDsn = "host=localhost user=bob password=bob dbname=shortener sslmode=disable"
+	}
+
 	return cfg
 }
