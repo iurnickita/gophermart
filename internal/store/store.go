@@ -203,7 +203,13 @@ func (store *store) BalanceGetHistory(ctx context.Context, customer string) ([]m
 
 func (store store) BalanceIncrease(ctx context.Context, customer string, order string, points int) error {
 	//Блокировка баланса пользователя
-	mutex := store.balanceMutex[customer]
+	var mutex *sync.Mutex
+	if m, ok := store.balanceMutex[customer]; ok {
+		mutex = m
+	} else {
+		mutex = &sync.Mutex{}
+		store.balanceMutex[customer] = mutex
+	}
 	mutex.Lock()
 	defer mutex.Unlock()
 
@@ -242,7 +248,13 @@ func (store store) BalanceIncrease(ctx context.Context, customer string, order s
 
 func (store *store) BalanceDecrease(ctx context.Context, customer string, order string, points int) error {
 	//Блокировка баланса пользователя
-	mutex := store.balanceMutex[customer]
+	var mutex *sync.Mutex
+	if m, ok := store.balanceMutex[customer]; ok {
+		mutex = m
+	} else {
+		mutex = &sync.Mutex{}
+		store.balanceMutex[customer] = mutex
+	}
 	mutex.Lock()
 	defer mutex.Unlock()
 
