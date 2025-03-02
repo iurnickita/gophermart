@@ -65,13 +65,13 @@ func NewStore(cfg config.Config) (Store, error) {
 	// [не реализовано] Записи нельзя редактировать/удалять
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS balance (" +
-			" customer VARCHAR (10)," +
+			" customer VARCHAR (20)," +
 			" operation SERIAL," +
 			" timestamp TIMESTAMP NOT NULL," +
 			" difference INTEGER NOT NULL," +
 			" balance INTEGER," +
 			" withdrawn INTEGER," +
-			" purchase_order VARCHAR (10) NOT NULL," +
+			" purchase_order VARCHAR (20) NOT NULL," +
 			" PRIMARY KEY (customer, operation)" +
 			" );")
 	if err != nil {
@@ -82,8 +82,8 @@ func NewStore(cfg config.Config) (Store, error) {
 	// Создается одна строка на заказ, после чего меняется ее статус
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS purchase_order (" +
-			" number VARCHAR (10) PRIMARY KEY," +
-			" customer VARCHAR (10) NOT NULL," +
+			" number VARCHAR (20) PRIMARY KEY," +
+			" customer VARCHAR (20) NOT NULL," +
 			" status VARCHAR (10) NOT NULL," +
 			" accrual INTEGER NOT NULL," +
 			" uploaded_at TIMESTAMP NOT NULL" +
