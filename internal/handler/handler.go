@@ -88,10 +88,10 @@ func (h *handler) PostOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 type GetOrderJSONResponse struct {
-	Number      string    `json:"number"`
-	Status      string    `json:"status"`
-	Accrual     float32   `json:"accrual"`
-	Uploaded_at time.Time `json:"uploaded_at"`
+	Number      string  `json:"number"`
+	Status      string  `json:"status"`
+	Accrual     float32 `json:"accrual"`
+	Uploaded_at string  `json:"uploaded_at"`
 }
 
 func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
@@ -113,7 +113,7 @@ func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 			GetOrderJSONResponse{Number: order.Number,
 				Status:      order.Data.Status,
 				Accrual:     h.pointsOutput(order.Data.Accrual),
-				Uploaded_at: order.Data.UploadedAt})
+				Uploaded_at: order.Data.UploadedAt.Format(time.RFC3339)})
 	}
 	responseJSON, err := json.Marshal(ordersJSON)
 	if err != nil {
@@ -189,9 +189,9 @@ func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
 }
 
 type GetWithdrawalsJSONResponse struct {
-	Order        string    `json:"order"`
-	Sum          float32   `json:"sum"`
-	Processed_at time.Time `json:"processed_at"`
+	Order        string  `json:"order"`
+	Sum          float32 `json:"sum"`
+	Processed_at string  `json:"processed_at"`
 }
 
 func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
@@ -212,7 +212,7 @@ func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 		withdrawalsJSON = append(withdrawalsJSON,
 			GetWithdrawalsJSONResponse{Order: withdraw.Data.Order,
 				Sum:          h.pointsOutput(-withdraw.Data.Difference),
-				Processed_at: withdraw.Data.Timestamp})
+				Processed_at: withdraw.Data.Timestamp.Format(time.RFC3339)})
 	}
 	responseJSON, err := json.Marshal(withdrawalsJSON)
 	if err != nil {
