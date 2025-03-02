@@ -170,10 +170,10 @@ func (store *store) BalanceGetWithdrawals(ctx context.Context, customer string) 
 	//Получение списаний
 	rows, err := store.database.QueryContext(ctx,
 		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
-			" FROM balance ORDER BY operation"+
+			" FROM balance"+
 			" WHERE customer = $1"+
 			"   AND difference < 0"+
-			" LIMIT 1",
+			" ORDER BY operation DESC LIMIT 1",
 		customer)
 	if err != nil {
 		return nil, err
