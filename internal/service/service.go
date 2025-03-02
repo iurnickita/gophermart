@@ -110,8 +110,8 @@ func (service *service) accrualProcessing(order model.PurchaseOrder) {
 			)
 			switch accrualAnswer.Status {
 			case accrualclient.AccrualStatusProcessing:
-				if order.Data.Status != accrualclient.AccrualStatusProcessing {
-					order.Data.Status = model.PurchaseOrderStatusInvalid
+				if order.Data.Status != model.PurchaseOrderStatusProcessing {
+					order.Data.Status = model.PurchaseOrderStatusProcessing
 					service.store.PurchaseOrderPut(ctx, order)
 				}
 			case accrualclient.AccrualStatusInvalid:
