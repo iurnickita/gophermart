@@ -47,12 +47,12 @@ func newHandler(auth auth.Auth, service service.Service, baseaddr string, zaplog
 func (h *handler) newRouter() *http.ServeMux {
 	mux := http.NewServeMux()
 	mux.HandleFunc("POST /api/user/register", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Register, h.zaplog)))
-	mux.HandleFunc("POST /api/user/login", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Login), h.zaplog))
-	mux.HandleFunc("POST /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.PostOrder)), h.zaplog))
-	mux.HandleFunc("GET /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetOrder)), h.zaplog))
-	mux.HandleFunc("GET /api/user/balance", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetBalance)), h.zaplog))
-	mux.HandleFunc("POST /api/user/balance/withdraw", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.PostWithdraw)), h.zaplog))
-	mux.HandleFunc("GET /api/user/withdrawals", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetWithdrawals)), h.zaplog))
+	mux.HandleFunc("POST /api/user/login", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Login, h.zaplog)))
+	mux.HandleFunc("POST /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostOrder), h.zaplog)))
+	mux.HandleFunc("GET /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetOrder), h.zaplog)))
+	mux.HandleFunc("GET /api/user/balance", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetBalance), h.zaplog)))
+	mux.HandleFunc("POST /api/user/balance/withdraw", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostWithdraw), h.zaplog)))
+	mux.HandleFunc("GET /api/user/withdrawals", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetWithdrawals), h.zaplog)))
 
 	return mux
 }
