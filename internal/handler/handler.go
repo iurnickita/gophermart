@@ -46,7 +46,7 @@ func newHandler(auth auth.Auth, service service.Service, baseaddr string, zaplog
 
 func (h *handler) newRouter() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/user/register", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Register), h.zaplog))
+	mux.HandleFunc("POST /api/user/register", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Register, h.zaplog)))
 	mux.HandleFunc("POST /api/user/login", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Login), h.zaplog))
 	mux.HandleFunc("POST /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.PostOrder)), h.zaplog))
 	mux.HandleFunc("GET /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetOrder)), h.zaplog))
