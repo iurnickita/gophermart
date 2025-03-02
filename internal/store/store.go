@@ -8,6 +8,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgconn"
 	_ "github.com/jackc/pgx/v5/stdlib"
 
 	"github.com/iurnickita/gophermart/internal/model"
@@ -49,9 +50,9 @@ func NewStore(cfg config.Config) (Store, error) {
 	// Таблица учетных записей
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS auth (" +
-			" uuid SERIAL PRIMARY KEY," +
-			" login VARCHAR (20) NOT NULL," +
-			" password VARCHAR (20) NOT NULL" +
+			" login VARCHAR (20) PRIMARY KEY," +
+			" uuid SERIAL UNIQUE," +
+			" password VARCHAR (30) NOT NULL" +
 			" );")
 	if err != nil {
 		return nil, err
@@ -110,12 +111,11 @@ func (store *store) AuthRegister(ctx context.Context, login string, password str
 	err := row.Scan(&uuid)
 	if err != nil {
 		// Проверка: уже существует
-		row := store.database.QueryRowContext(ctx,
-			"SELECT uuid FROM auth"+
-				" WHERE login = $1",
-			login)
-		if err2 := row.Scan(); err2 == nil {
-			return "", ErrAlreadyExists
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				return "", ErrAlreadyExists
+			}
 		}
 
 		return "", err
