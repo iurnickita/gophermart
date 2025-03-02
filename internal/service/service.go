@@ -10,6 +10,7 @@ import (
 	"github.com/iurnickita/gophermart/internal/service/accrualclient"
 	"github.com/iurnickita/gophermart/internal/service/config"
 	"github.com/iurnickita/gophermart/internal/store"
+	"go.uber.org/zap"
 )
 
 type Service interface {
@@ -33,9 +34,10 @@ type service struct {
 	store   store.Store
 	balance balance.Balance
 	accrual accrualclient.AccrualClient
+	zaplog  *zap.Logger
 }
 
-func NewService(cfg config.Config, store store.Store) (Service, error) {
+func NewService(cfg config.Config, store store.Store, zaplog *zap.Logger) (Service, error) {
 	balance := balance.NewBalance(store)
 	accrual := accrualclient.NewAccrualClient(cfg.AccrualAddr)
 
@@ -43,7 +45,8 @@ func NewService(cfg config.Config, store store.Store) (Service, error) {
 		cfg:     cfg,
 		store:   store,
 		balance: balance,
-		accrual: accrual}
+		accrual: accrual,
+		zaplog:  zaplog}
 
 	return &service, nil
 }
@@ -97,9 +100,14 @@ func (service *service) accrualProcessing(order model.PurchaseOrder) {
 		case <-ticker.C:
 			accrualAnswer, err = service.accrual.GetAccrual(order)
 			if err != nil {
-				// retry бы тут
+				service.zaplog.Info("accrual error",
+					zap.String("error:", err.Error()),
+				)
 				return
 			}
+			service.zaplog.Info("accrual answer",
+				zap.String("status:", accrualAnswer.Status),
+			)
 			switch accrualAnswer.Status {
 			case accrualclient.AccrualStatusProcessing:
 				if order.Data.Status != accrualclient.AccrualStatusProcessing {
