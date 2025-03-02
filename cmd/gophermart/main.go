@@ -35,7 +35,7 @@ func run() error {
 		return err
 	}
 
-	service, err := service.NewService(cfg.Service, store)
+	service, err := service.NewService(cfg.Service, store, zaplog)
 	if err != nil {
 		return err
 	}
