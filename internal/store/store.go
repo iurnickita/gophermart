@@ -348,10 +348,11 @@ func (store *store) PurchaseOrderPut(ctx context.Context, order model.PurchaseOr
 	//Обновление статуса заказа
 	_, err := store.database.ExecContext(ctx,
 		"UPDATE purchase_order AS o"+
-			" SET status = $1"+
-			" WHERE number = $2"+
-			"   AND customer = $3",
+			" SET status = $1, accrual = $2"+
+			" WHERE number = $3"+
+			"   AND customer = $4",
 		order.Data.Status,
+		order.Data.Accrual,
 		order.Number,
 		order.Data.Customer)
 	if err != nil {

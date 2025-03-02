@@ -9,7 +9,6 @@ import (
 	"github.com/iurnickita/gophermart/internal/model"
 )
 
-// JSON ответ accrual
 type AccrualAnswer struct {
 	Order   string
 	Status  string
