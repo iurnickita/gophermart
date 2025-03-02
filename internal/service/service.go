@@ -92,7 +92,7 @@ func (service *service) accrualProcessing(order model.PurchaseOrder) {
 	var accrualAnswer accrualclient.AccrualAnswer
 	var err error
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Second)
 	for {
 		select {
 		case <-ctx.Done():

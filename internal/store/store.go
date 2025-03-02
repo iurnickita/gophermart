@@ -308,18 +308,25 @@ func (store *store) PurchaseOrderPost(ctx context.Context, order model.PurchaseO
 		order.Data.Accrual,
 		order.Data.UploadedAt)
 	if err != nil {
-		row := store.database.QueryRowContext(ctx,
-			"SELECT customer FROM purchase_order"+
-				" WHERE number = $1",
-			order.Number)
-		var customer string
-		err = row.Scan(&customer)
-		if err == nil {
-			if customer != order.Data.Customer {
+		// Проверка: уже существует
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) {
+			if pgErr.Code == "23505" {
+				row := store.database.QueryRowContext(ctx,
+					"SELECT customer FROM purchase_order"+
+						" WHERE number = $1",
+					order.Number)
+				var customer string
+				err = row.Scan(&customer)
+				if err == nil {
+					if customer != order.Data.Customer {
+						return ErrAlreadyExists
+					}
+				}
 				return ErrDuplicateRequest
 			}
 		}
-		return ErrAlreadyExists
+		return err
 	}
 	return nil
 }
