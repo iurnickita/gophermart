@@ -93,7 +93,8 @@ func NewStore(cfg config.Config) (Store, error) {
 	}
 
 	return &store{
-		database: db,
+		database:     db,
+		balanceMutex: make(map[string]*sync.Mutex),
 	}, nil
 }
 
@@ -148,9 +149,9 @@ func (store *store) BalanceGetActual(ctx context.Context, customer string) (mode
 	var balanceRow model.Balance
 	row := store.database.QueryRowContext(ctx,
 		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
-			" FROM balance ORDER BY operation"+
+			" FROM balance"+
 			" WHERE customer = $1"+
-			" LIMIT 1",
+			" ORDER BY operation DESC LIMIT 1",
 		customer)
 	err := row.Scan(&balanceRow.Key.Customer,
 		&balanceRow.Key.Operation,
@@ -266,9 +267,9 @@ func (store *store) BalanceDecrease(ctx context.Context, customer string, order 
 	var balanceRow model.Balance
 	row := store.database.QueryRowContext(ctx,
 		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
-			" FROM balance ORDER BY operation"+
+			" FROM balance"+
 			" WHERE customer = $1"+
-			" LIMIT 1",
+			" ORDER BY operation DESC LIMIT 1",
 		customer)
 	err := row.Scan(&balanceRow.Key.Customer,
 		&balanceRow.Key.Operation,
