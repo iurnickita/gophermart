@@ -224,7 +224,7 @@ func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *handler) pointsOutput(points int) float32 {
-	return float32(points / 100)
+	return float32(points) / 100
 }
 
 func (h *handler) pointsInput(points float32) int {
