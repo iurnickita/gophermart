@@ -9,11 +9,10 @@ import (
 	"github.com/iurnickita/gophermart/internal/model"
 )
 
-// JSON ответ accrual
 type AccrualAnswer struct {
-	Order   string `json:"order"`
-	Status  string `json:"status"`
-	Accrual int    `json:"accrual"`
+	Order   string
+	Status  string
+	Accrual int
 }
 
 const (
@@ -35,6 +34,12 @@ func NewAccrualClient(serviceAddr string) AccrualClient {
 	return accrualClient{serviceAddr: serviceAddr}
 }
 
+type GetAccrualAnswerJSON struct {
+	Order   string  `json:"order"`
+	Status  string  `json:"status"`
+	Accrual float32 `json:"accrual"`
+}
+
 func (client accrualClient) GetAccrual(order model.PurchaseOrder) (AccrualAnswer, error) {
 	path := "/api/orders/"
 
@@ -48,8 +53,15 @@ func (client accrualClient) GetAccrual(order model.PurchaseOrder) (AccrualAnswer
 
 	switch setresp.StatusCode() {
 	case http.StatusOK:
+		var accrualAnswerJSON GetAccrualAnswerJSON
+		err = json.Unmarshal(setresp.Body(), &accrualAnswerJSON)
+		if err != nil {
+			return AccrualAnswer{}, err
+		}
 		var accrualAnswer AccrualAnswer
-		err = json.Unmarshal(setresp.Body(), &accrualAnswer)
+		accrualAnswer.Order = accrualAnswerJSON.Order
+		accrualAnswer.Status = accrualAnswerJSON.Status
+		accrualAnswer.Accrual = int(accrualAnswerJSON.Accrual * 100)
 		return accrualAnswer, err
 	default:
 		return AccrualAnswer{}, fmt.Errorf("accrual request status: %d", setresp.StatusCode())

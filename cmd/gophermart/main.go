@@ -30,8 +30,17 @@ func run() error {
 		return err
 	}
 
-	auth := auth.NewAuth(store)
-	service := service.NewService(cfg.Service, store)
+	auth, err := auth.NewAuth(store)
+	if err != nil {
+		return err
+	}
+
+	service, err := service.NewService(cfg.Service, store, zaplog)
+	if err != nil {
+		return err
+	}
 
 	return handler.Serve(cfg.Handler, auth, service, zaplog)
 }
+
+// curl -v -X POST --json '{"login": "Pier123", "password": "Pier123"}' http://localhost:8080/api/user/register

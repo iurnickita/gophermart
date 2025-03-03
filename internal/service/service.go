@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/iurnickita/gophermart/internal/balance"
@@ -10,6 +11,8 @@ import (
 	"github.com/iurnickita/gophermart/internal/service/accrualclient"
 	"github.com/iurnickita/gophermart/internal/service/config"
 	"github.com/iurnickita/gophermart/internal/store"
+	"github.com/theplant/luhn"
+	"go.uber.org/zap"
 )
 
 type Service interface {
@@ -33,9 +36,10 @@ type service struct {
 	store   store.Store
 	balance balance.Balance
 	accrual accrualclient.AccrualClient
+	zaplog  *zap.Logger
 }
 
-func NewService(cfg config.Config, store store.Store) Service {
+func NewService(cfg config.Config, store store.Store, zaplog *zap.Logger) (Service, error) {
 	balance := balance.NewBalance(store)
 	accrual := accrualclient.NewAccrualClient(cfg.AccrualAddr)
 
@@ -43,9 +47,10 @@ func NewService(cfg config.Config, store store.Store) Service {
 		cfg:     cfg,
 		store:   store,
 		balance: balance,
-		accrual: accrual}
+		accrual: accrual,
+		zaplog:  zaplog}
 
-	return &service
+	return &service, nil
 }
 
 func (service *service) PostOrder(order model.PurchaseOrder) error {
@@ -58,7 +63,13 @@ func (service *service) PostOrder(order model.PurchaseOrder) error {
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	// ... ErrUnprocessableEntity
+	number_int, err := strconv.Atoi(order.Number)
+	if err != nil {
+		return ErrUnprocessableEntity
+	}
+	if !luhn.Valid(number_int) {
+		return ErrUnprocessableEntity
+	}
 
 	var newOrder model.PurchaseOrder
 	newOrder.Number = order.Number
@@ -66,7 +77,7 @@ func (service *service) PostOrder(order model.PurchaseOrder) error {
 	newOrder.Data.Status = model.PurchaseOrderStatusNew
 	newOrder.Data.UploadedAt = time.Now()
 
-	err := service.store.PurchaseOrderPost(ctx, newOrder)
+	err = service.store.PurchaseOrderPost(ctx, newOrder)
 	if err != nil {
 		switch err {
 		case store.ErrAlreadyExists:
@@ -89,7 +100,7 @@ func (service *service) accrualProcessing(order model.PurchaseOrder) {
 	var accrualAnswer accrualclient.AccrualAnswer
 	var err error
 
-	ticker := time.NewTicker(5 * time.Second)
+	ticker := time.NewTicker(time.Second)
 	for {
 		select {
 		case <-ctx.Done():
@@ -97,13 +108,18 @@ func (service *service) accrualProcessing(order model.PurchaseOrder) {
 		case <-ticker.C:
 			accrualAnswer, err = service.accrual.GetAccrual(order)
 			if err != nil {
-				// retry бы тут
+				service.zaplog.Info("accrual error",
+					zap.String("error:", err.Error()),
+				)
 				return
 			}
+			service.zaplog.Info("accrual answer",
+				zap.String("status:", accrualAnswer.Status),
+			)
 			switch accrualAnswer.Status {
 			case accrualclient.AccrualStatusProcessing:
-				if order.Data.Status != accrualclient.AccrualStatusProcessing {
-					order.Data.Status = model.PurchaseOrderStatusInvalid
+				if order.Data.Status != model.PurchaseOrderStatusProcessing {
+					order.Data.Status = model.PurchaseOrderStatusProcessing
 					service.store.PurchaseOrderPut(ctx, order)
 				}
 			case accrualclient.AccrualStatusInvalid:
@@ -151,9 +167,15 @@ func (service *service) PostWithdraw(order model.PurchaseOrder, points int) erro
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	// ... ErrUnprocessableEntity
+	number_int, err := strconv.Atoi(order.Number)
+	if err != nil {
+		return ErrUnprocessableEntity
+	}
+	if !luhn.Valid(number_int) {
+		return ErrUnprocessableEntity
+	}
 
-	err := service.balance.Decrease(order.Data.Customer, order.Number, points)
+	err = service.balance.Decrease(order.Data.Customer, order.Number, points)
 	if err != nil {
 		switch err {
 		case store.ErrInsufficientFunds:

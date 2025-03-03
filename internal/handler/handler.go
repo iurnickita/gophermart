@@ -46,13 +46,13 @@ func newHandler(auth auth.Auth, service service.Service, baseaddr string, zaplog
 
 func (h *handler) newRouter() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/user/register", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Register), h.zaplog))
-	mux.HandleFunc("POST /api/user/login", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Login), h.zaplog))
-	mux.HandleFunc("POST /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.PostOrder)), h.zaplog))
-	mux.HandleFunc("GET /api/user/orders", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetOrder)), h.zaplog))
-	mux.HandleFunc("GET /api/user/balance", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetBalance)), h.zaplog))
-	mux.HandleFunc("POST /api/user/balance/withdraw", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.PostWithdraw)), h.zaplog))
-	mux.HandleFunc("GET /api/user/withdrawals", logger.RequestLogMdlw(gzip.GzipMiddleware(h.auth.Middleware(h.GetWithdrawals)), h.zaplog))
+	mux.HandleFunc("POST /api/user/register", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Register, h.zaplog)))
+	mux.HandleFunc("POST /api/user/login", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Login, h.zaplog)))
+	mux.HandleFunc("POST /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostOrder), h.zaplog)))
+	mux.HandleFunc("GET /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetOrder), h.zaplog)))
+	mux.HandleFunc("GET /api/user/balance", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetBalance), h.zaplog)))
+	mux.HandleFunc("POST /api/user/balance/withdraw", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostWithdraw), h.zaplog)))
+	mux.HandleFunc("GET /api/user/withdrawals", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetWithdrawals), h.zaplog)))
 
 	return mux
 }
@@ -64,7 +64,7 @@ func (h *handler) PostOrder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	order := model.PurchaseOrder{Number: string(number),
 		Data: model.PurchaseOrderData{Customer: userCode}}
@@ -88,14 +88,14 @@ func (h *handler) PostOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 type GetOrderJSONResponse struct {
-	Number      string    `json:"number"`
-	Status      string    `json:"status"`
-	Accrual     int       `json:"accrual"`
-	Uploaded_at time.Time `json:"uploaded_at"`
+	Number      string  `json:"number"`
+	Status      string  `json:"status"`
+	Accrual     float32 `json:"accrual"`
+	Uploaded_at string  `json:"uploaded_at"`
 }
 
 func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	orders, err := h.service.GetOrder(userCode)
 	if err != nil {
@@ -112,8 +112,8 @@ func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 		ordersJSON = append(ordersJSON,
 			GetOrderJSONResponse{Number: order.Number,
 				Status:      order.Data.Status,
-				Accrual:     order.Data.Accrual,
-				Uploaded_at: order.Data.UploadedAt})
+				Accrual:     h.pointsOutput(order.Data.Accrual),
+				Uploaded_at: order.Data.UploadedAt.Format(time.RFC3339)})
 	}
 	responseJSON, err := json.Marshal(ordersJSON)
 	if err != nil {
@@ -125,12 +125,12 @@ func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 }
 
 type GetBalanceJSONResponse struct {
-	Current   int `json:"current"`
-	Withdrawn int `json:"withdrawn"`
+	Current   float32 `json:"current"`
+	Withdrawn float32 `json:"withdrawn"`
 }
 
 func (h *handler) GetBalance(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	balance, err := h.service.GetBalance(userCode)
 	if err != nil {
@@ -138,8 +138,8 @@ func (h *handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	balanceJSON := GetBalanceJSONResponse{Current: balance.Data.Balance,
-		Withdrawn: balance.Data.Withdrawn}
+	balanceJSON := GetBalanceJSONResponse{Current: h.pointsOutput(balance.Data.Balance),
+		Withdrawn: h.pointsOutput(balance.Data.Withdrawn)}
 	responseJSON, err := json.Marshal(balanceJSON)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
@@ -150,8 +150,8 @@ func (h *handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 }
 
 type PostWithdrawJSONRequest struct {
-	Order string `json:"order"`
-	Sum   int    `json:"sum"`
+	Order string  `json:"order"`
+	Sum   float32 `json:"sum"`
 }
 
 func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
@@ -169,12 +169,12 @@ func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	order := model.PurchaseOrder{
 		Number: withdrawJSON.Order,
 		Data:   model.PurchaseOrderData{Customer: userCode}}
-	err = h.service.PostWithdraw(order, withdrawJSON.Sum)
+	err = h.service.PostWithdraw(order, h.pointsInput(withdrawJSON.Sum))
 	if err != nil {
 		switch err {
 		case service.ErrInsufficientFunds:
@@ -189,13 +189,13 @@ func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
 }
 
 type GetWithdrawalsJSONResponse struct {
-	Order        string    `json:"order"`
-	Sum          int       `json:"sum"`
-	Processed_at time.Time `json:"processed_at"`
+	Order        string  `json:"order"`
+	Sum          float32 `json:"sum"`
+	Processed_at string  `json:"processed_at"`
 }
 
 func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
-	userCode := r.Header.Get(auth.UserCodeKey)
+	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
 	withdrawals, err := h.service.GetWithdrawals(userCode)
 	if err != nil {
@@ -211,8 +211,8 @@ func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 	for _, withdraw := range withdrawals {
 		withdrawalsJSON = append(withdrawalsJSON,
 			GetWithdrawalsJSONResponse{Order: withdraw.Data.Order,
-				Sum:          -withdraw.Data.Difference,
-				Processed_at: withdraw.Data.Timestamp})
+				Sum:          h.pointsOutput(-withdraw.Data.Difference),
+				Processed_at: withdraw.Data.Timestamp.Format(time.RFC3339)})
 	}
 	responseJSON, err := json.Marshal(withdrawalsJSON)
 	if err != nil {
@@ -221,4 +221,12 @@ func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.Write(responseJSON)
+}
+
+func (h *handler) pointsOutput(points int) float32 {
+	return float32(points) / 100
+}
+
+func (h *handler) pointsInput(points float32) int {
+	return int(points * 100)
 }

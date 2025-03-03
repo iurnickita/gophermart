@@ -1,6 +1,8 @@
 package logger
 
 import (
+	"bytes"
+	"io"
 	"net/http"
 	"strconv"
 	"time"
@@ -32,9 +34,15 @@ func NewZapLog(cfg config.Config) (*zap.Logger, error) {
 func RequestLogMdlw(h http.HandlerFunc, zaplog *zap.Logger) http.HandlerFunc {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
+		// request body
+		bodyBytes, _ := io.ReadAll(r.Body)
+		r.Body.Close() //  must close
+		r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
+
 		zaplog.Info("got incoming HTTP request",
 			zap.String("path", r.URL.Path),
 			zap.String("method", r.Method),
+			zap.String("body", string(bodyBytes)),
 		)
 
 		wl := NewResponseWriterLogger(w)
@@ -45,6 +53,7 @@ func RequestLogMdlw(h http.HandlerFunc, zaplog *zap.Logger) http.HandlerFunc {
 
 		zaplog.Info("send HTTP response",
 			zap.String("code", strconv.Itoa(wl.statusCode)),
+			zap.String("body", string(wl.body)),
 			zap.String("length", strconv.Itoa(wl.length)),
 			zap.String("duration", handlerDuration.String()),
 		)
@@ -56,10 +65,11 @@ type responseWriterLogger struct {
 	http.ResponseWriter
 	statusCode int
 	length     int
+	body       []byte
 }
 
 func NewResponseWriterLogger(w http.ResponseWriter) *responseWriterLogger {
-	return &responseWriterLogger{w, http.StatusOK, 0}
+	return &responseWriterLogger{w, http.StatusOK, 0, []byte{}}
 }
 
 func (wl *responseWriterLogger) WriteHeader(code int) {
@@ -68,6 +78,7 @@ func (wl *responseWriterLogger) WriteHeader(code int) {
 }
 
 func (wl *responseWriterLogger) Write(b []byte) (n int, err error) {
+	wl.body = b
 	n, err = wl.ResponseWriter.Write(b)
 	wl.length += n
 	return

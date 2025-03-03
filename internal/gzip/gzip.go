@@ -4,7 +4,6 @@ import (
 	"compress/gzip"
 	"io"
 	"net/http"
-	"strings"
 )
 
 // compressWriter реализует интерфейс http.ResponseWriter и позволяет прозрачно для сервера
@@ -73,7 +72,7 @@ func (c *compressReader) Close() error {
 
 func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		// по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
+		/* // по умолчанию устанавливаем оригинальный http.ResponseWriter как тот,
 		// который будем передавать следующей функции
 		ow := w
 
@@ -105,6 +104,8 @@ func GzipMiddleware(h http.HandlerFunc) http.HandlerFunc {
 		}
 
 		// передаём управление хендлеру
-		h.ServeHTTP(ow, r)
+		h.ServeHTTP(ow, r) */
+
+		h.ServeHTTP(w, r)
 	}
 }
