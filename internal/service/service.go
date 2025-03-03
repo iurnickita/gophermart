@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/iurnickita/gophermart/internal/balance"
@@ -10,6 +11,7 @@ import (
 	"github.com/iurnickita/gophermart/internal/service/accrualclient"
 	"github.com/iurnickita/gophermart/internal/service/config"
 	"github.com/iurnickita/gophermart/internal/store"
+	"github.com/theplant/luhn"
 	"go.uber.org/zap"
 )
 
@@ -61,7 +63,13 @@ func (service *service) PostOrder(order model.PurchaseOrder) error {
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	// ... ErrUnprocessableEntity
+	number_int, err := strconv.Atoi(order.Number)
+	if err != nil {
+		return ErrUnprocessableEntity
+	}
+	if !luhn.Valid(number_int) {
+		return ErrUnprocessableEntity
+	}
 
 	var newOrder model.PurchaseOrder
 	newOrder.Number = order.Number
@@ -69,7 +77,7 @@ func (service *service) PostOrder(order model.PurchaseOrder) error {
 	newOrder.Data.Status = model.PurchaseOrderStatusNew
 	newOrder.Data.UploadedAt = time.Now()
 
-	err := service.store.PurchaseOrderPost(ctx, newOrder)
+	err = service.store.PurchaseOrderPost(ctx, newOrder)
 	if err != nil {
 		switch err {
 		case store.ErrAlreadyExists:
@@ -159,9 +167,15 @@ func (service *service) PostWithdraw(order model.PurchaseOrder, points int) erro
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	// ... ErrUnprocessableEntity
+	number_int, err := strconv.Atoi(order.Number)
+	if err != nil {
+		return ErrUnprocessableEntity
+	}
+	if !luhn.Valid(number_int) {
+		return ErrUnprocessableEntity
+	}
 
-	err := service.balance.Decrease(order.Data.Customer, order.Number, points)
+	err = service.balance.Decrease(order.Data.Customer, order.Number, points)
 	if err != nil {
 		switch err {
 		case store.ErrInsufficientFunds:
