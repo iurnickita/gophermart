@@ -12,7 +12,7 @@ type Claims struct {
 	UserCode string
 }
 
-const TOKEN_EXP = time.Hour * 3
+const tokenExp = time.Hour * 3
 const secretKey = "supersecretkey"
 
 func BuildJWTString(UserCode string) (string, error) {
@@ -20,7 +20,7 @@ func BuildJWTString(UserCode string) (string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, Claims{
 		RegisteredClaims: jwt.RegisteredClaims{
 			// когда создан токен
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(TOKEN_EXP)),
+			ExpiresAt: jwt.NewNumericDate(time.Now().Add(tokenExp)),
 		},
 		// собственное утверждение
 		UserCode: UserCode,

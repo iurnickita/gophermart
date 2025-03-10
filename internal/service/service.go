@@ -63,11 +63,11 @@ func (service *service) PostOrder(order model.PurchaseOrder) error {
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	number_int, err := strconv.Atoi(order.Number)
+	numberInt, err := strconv.Atoi(order.Number)
 	if err != nil {
 		return ErrUnprocessableEntity
 	}
-	if !luhn.Valid(number_int) {
+	if !luhn.Valid(numberInt) {
 		return ErrUnprocessableEntity
 	}
 
@@ -167,11 +167,11 @@ func (service *service) PostWithdraw(order model.PurchaseOrder, points int) erro
 		return ErrInsufficientData
 	}
 	// Проверка по алгоритму Луна
-	number_int, err := strconv.Atoi(order.Number)
+	numberInt, err := strconv.Atoi(order.Number)
 	if err != nil {
 		return ErrUnprocessableEntity
 	}
-	if !luhn.Valid(number_int) {
+	if !luhn.Valid(numberInt) {
 		return ErrUnprocessableEntity
 	}
 

@@ -179,6 +179,9 @@ func (store *store) BalanceGetWithdrawals(ctx context.Context, customer string) 
 		return nil, err
 	}
 	defer rows.Close()
+	if rows.Err() != nil {
+		return nil, err
+	}
 	var withdrawals []model.Balance
 	for rows.Next() {
 		var balanceRow model.Balance
@@ -372,6 +375,9 @@ func (store *store) PurchaseOrderGet(ctx context.Context, customer string) ([]mo
 		return nil, err
 	}
 	defer rows.Close()
+	if rows.Err() != nil {
+		return nil, err
+	}
 	var orders []model.PurchaseOrder
 	for rows.Next() {
 		var orderRow model.PurchaseOrder
