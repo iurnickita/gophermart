@@ -83,11 +83,13 @@ func (service *service) accrualRunWorkerPool() {
 	if retryInterval == 0 {
 		retryInterval = 5 * time.Second
 	}
-	for r := range results {
-		if r.err != nil {
-			service.accrualAddForProcessing(r.order, retryInterval)
+	go func(results <-chan accrualResult, retryInterval time.Duration) {
+		for r := range results {
+			if r.err != nil {
+				service.accrualAddForProcessing(r.order, retryInterval)
+			}
 		}
-	}
+	}(results, retryInterval)
 }
 
 func (service *service) accrualAddForProcessing(order model.PurchaseOrder, wait time.Duration) {

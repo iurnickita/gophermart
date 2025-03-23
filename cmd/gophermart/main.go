@@ -44,3 +44,4 @@ func run() error {
 }
 
 // curl -v -X POST --json '{"login": "Pier123", "password": "Pier123"}' http://localhost:8080/api/user/register
+// curl -v -X POST --cookie "gophermartUserToken=" --data 12345678903 http://localhost:8080/api/user/orders
