@@ -31,7 +31,7 @@ func NewZapLog(cfg config.Config) (*zap.Logger, error) {
 }
 
 // middleware-логер для входящих HTTP-запросов.
-func RequestLogMdlw(h http.HandlerFunc, zaplog *zap.Logger) http.HandlerFunc {
+func RequestLogMdlw(next http.Handler, zaplog *zap.Logger) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 
 		// request body
@@ -48,7 +48,7 @@ func RequestLogMdlw(h http.HandlerFunc, zaplog *zap.Logger) http.HandlerFunc {
 		wl := NewResponseWriterLogger(w)
 
 		handlerStart := time.Now()
-		h(wl, r)
+		next.ServeHTTP(wl, r)
 		handlerDuration := time.Since(handlerStart)
 
 		zaplog.Info("send HTTP response",

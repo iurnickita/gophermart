@@ -1,5 +1,7 @@
 package config
 
 type Config struct {
-	AccrualAddr string
+	AccrualAddr    string
+	AccrualWorkers int
+	AccrualRetry   int
 }

@@ -2,7 +2,6 @@ package auth
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"net/http"
 
@@ -50,7 +49,7 @@ func (a *auth) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Запись в БД
-	ctx := context.Background()
+	ctx := r.Context()
 	userCode, err := a.store.AuthRegister(ctx, register.Login, register.Password)
 	if err != nil {
 		switch err {
@@ -83,7 +82,7 @@ func (a *auth) Login(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Проверка в БД
-	ctx := context.Background()
+	ctx := r.Context()
 	userCode, err := a.store.AuthLogin(ctx, register.Login, register.Password)
 	if err != nil {
 		switch err {

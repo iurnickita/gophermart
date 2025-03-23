@@ -5,7 +5,6 @@ import (
 	"database/sql"
 	"errors"
 	"strconv"
-	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgconn"
@@ -37,8 +36,7 @@ var (
 )
 
 type store struct {
-	database     *sql.DB
-	balanceMutex map[string]*sync.Mutex
+	database *sql.DB
 }
 
 func NewStore(cfg config.Config) (Store, error) {
@@ -58,13 +56,22 @@ func NewStore(cfg config.Config) (Store, error) {
 		return nil, err
 	}
 
-	// Таблица баланса пользователя
-	// Представлят собой журнал. Для каждой новой операции пользователя создается новая запись,
-	// так легче отслеживать историю и выявлять ошибки при операциях с балансом
-	// [не реализовано] Блокировка на уровне пользователя *костыль: store.balanceMutex[customer]mutex
-	// [не реализовано] Записи нельзя редактировать/удалять
+	// Таблицы баланса пользователя
 	_, err = db.Exec(
 		"CREATE TABLE IF NOT EXISTS balance (" +
+			" customer VARCHAR (20)," +
+			" timestamp TIMESTAMP NOT NULL," +
+			" difference INTEGER NOT NULL," +
+			" balance INTEGER," +
+			" withdrawn INTEGER," +
+			" purchase_order VARCHAR (20) NOT NULL," +
+			" PRIMARY KEY (customer)" +
+			" );")
+	if err != nil {
+		return nil, err
+	}
+	_, err = db.Exec(
+		"CREATE TABLE IF NOT EXISTS balance_history (" +
 			" customer VARCHAR (20)," +
 			" operation SERIAL," +
 			" timestamp TIMESTAMP NOT NULL," +
@@ -93,8 +100,7 @@ func NewStore(cfg config.Config) (Store, error) {
 	}
 
 	return &store{
-		database:     db,
-		balanceMutex: make(map[string]*sync.Mutex),
+		database: db,
 	}, nil
 }
 
@@ -148,13 +154,11 @@ func (store *store) BalanceGetActual(ctx context.Context, customer string) (mode
 	//Получение актуального баланса
 	var balanceRow model.Balance
 	row := store.database.QueryRowContext(ctx,
-		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
+		"SELECT customer, timestamp, difference, balance, withdrawn, purchase_order"+
 			" FROM balance"+
-			" WHERE customer = $1"+
-			" ORDER BY operation DESC LIMIT 1",
+			" WHERE customer = $1",
 		customer)
 	err := row.Scan(&balanceRow.Key.Customer,
-		&balanceRow.Key.Operation,
 		&balanceRow.Data.Timestamp,
 		&balanceRow.Data.Difference,
 		&balanceRow.Data.Balance,
@@ -170,10 +174,10 @@ func (store *store) BalanceGetWithdrawals(ctx context.Context, customer string) 
 	//Получение списаний
 	rows, err := store.database.QueryContext(ctx,
 		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
-			" FROM balance"+
+			" FROM balance_history"+
 			" WHERE customer = $1"+
 			"   AND difference < 0"+
-			" ORDER BY operation DESC LIMIT 1",
+			" ORDER BY operation DESC",
 		customer)
 	if err != nil {
 		return nil, err
@@ -197,6 +201,9 @@ func (store *store) BalanceGetWithdrawals(ctx context.Context, customer string) 
 		}
 		withdrawals = append(withdrawals, balanceRow)
 	}
+	if rows.Err() != nil {
+		return nil, err
+	}
 
 	return withdrawals, nil
 }
@@ -206,24 +213,32 @@ func (store *store) BalanceGetHistory(ctx context.Context, customer string) ([]m
 }
 
 func (store store) BalanceIncrease(ctx context.Context, customer string, order string, points int) error {
-	//Блокировка баланса пользователя
-	var mutex *sync.Mutex
-	if m, ok := store.balanceMutex[customer]; ok {
-		mutex = m
-	} else {
-		mutex = &sync.Mutex{}
-		store.balanceMutex[customer] = mutex
-	}
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	if points <= 0 {
 		return ErrPointsIncorrect
 	}
 
-	//Получение актуального баланса
-	balanceRow, err := store.BalanceGetActual(ctx, customer)
+	tx, err := store.database.BeginTx(ctx, nil)
 	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	//Получение актуального баланса
+	//Блокировка баланса пользователя
+	var balanceRow model.Balance
+	row := tx.QueryRowContext(ctx,
+		"SELECT customer, timestamp, difference, balance, withdrawn, purchase_order"+
+			" FROM balance"+
+			" WHERE customer = $1"+
+			" FOR UPDATE",
+		customer)
+	err = row.Scan(&balanceRow.Key.Customer,
+		&balanceRow.Data.Timestamp,
+		&balanceRow.Data.Difference,
+		&balanceRow.Data.Balance,
+		&balanceRow.Data.Withdrawn,
+		&balanceRow.Data.Order)
+	if err != nil && err != sql.ErrNoRows { // если нет строки - ок
 		return err
 	}
 
@@ -234,8 +249,24 @@ func (store store) BalanceIncrease(ctx context.Context, customer string, order s
 	balanceRow.Data.Balance += points
 	//balanceRow.Data.Withdrawn
 	balanceRow.Data.Order = order
-	_, err = store.database.ExecContext(ctx,
+	_, err = tx.ExecContext(ctx,
 		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+			" VALUES ($1, $2, $3, $4, $5, $6)"+
+			" ON CONFLICT (customer) DO"+
+			" UPDATE"+
+			" SET (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+			" = ($1, $2, $3, $4, $5, $6)",
+		balanceRow.Key.Customer,
+		balanceRow.Data.Timestamp,
+		balanceRow.Data.Difference,
+		balanceRow.Data.Balance,
+		balanceRow.Data.Withdrawn,
+		balanceRow.Data.Order)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO balance_history (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
 			" VALUES ($1, $2, $3, $4, $5, $6)",
 		balanceRow.Key.Customer,
 		balanceRow.Data.Timestamp,
@@ -247,41 +278,40 @@ func (store store) BalanceIncrease(ctx context.Context, customer string, order s
 		return err
 	}
 
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
 func (store *store) BalanceDecrease(ctx context.Context, customer string, order string, points int) error {
-	//Блокировка баланса пользователя
-	var mutex *sync.Mutex
-	if m, ok := store.balanceMutex[customer]; ok {
-		mutex = m
-	} else {
-		mutex = &sync.Mutex{}
-		store.balanceMutex[customer] = mutex
-	}
-	mutex.Lock()
-	defer mutex.Unlock()
-
 	if points <= 0 {
 		return ErrPointsIncorrect
 	}
 
+	tx, err := store.database.BeginTx(ctx, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
 	//Получение актуального баланса
+	//Блокировка баланса пользователя
 	var balanceRow model.Balance
-	row := store.database.QueryRowContext(ctx,
-		"SELECT customer, operation, timestamp, difference, balance, withdrawn, purchase_order"+
+	row := tx.QueryRowContext(ctx,
+		"SELECT customer, timestamp, difference, balance, withdrawn, purchase_order"+
 			" FROM balance"+
 			" WHERE customer = $1"+
-			" ORDER BY operation DESC LIMIT 1",
+			" FOR UPDATE",
 		customer)
-	err := row.Scan(&balanceRow.Key.Customer,
-		&balanceRow.Key.Operation,
+	err = row.Scan(&balanceRow.Key.Customer,
 		&balanceRow.Data.Timestamp,
 		&balanceRow.Data.Difference,
 		&balanceRow.Data.Balance,
 		&balanceRow.Data.Withdrawn,
 		&balanceRow.Data.Order)
-	if err != nil {
+	if err != nil { // если нет строки - не ок
 		return err
 	}
 
@@ -297,8 +327,21 @@ func (store *store) BalanceDecrease(ctx context.Context, customer string, order 
 	balanceRow.Data.Balance -= points
 	balanceRow.Data.Withdrawn += points
 	balanceRow.Data.Order = order
-	_, err = store.database.ExecContext(ctx,
-		"INSERT INTO balance (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+	_, err = tx.ExecContext(ctx,
+		"UPDATE balance"+
+			" SET (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
+			" = ($1, $2, $3, $4, $5, $6)",
+		balanceRow.Key.Customer,
+		balanceRow.Data.Timestamp,
+		balanceRow.Data.Difference,
+		balanceRow.Data.Balance,
+		balanceRow.Data.Withdrawn,
+		balanceRow.Data.Order)
+	if err != nil {
+		return err
+	}
+	_, err = tx.ExecContext(ctx,
+		"INSERT INTO balance_history (customer, timestamp, difference, balance, withdrawn, purchase_order)"+
 			" VALUES ($1, $2, $3, $4, $5, $6)",
 		balanceRow.Key.Customer,
 		balanceRow.Data.Timestamp,
@@ -310,6 +353,10 @@ func (store *store) BalanceDecrease(ctx context.Context, customer string, order 
 		return err
 	}
 
+	err = tx.Commit()
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
@@ -390,6 +437,9 @@ func (store *store) PurchaseOrderGet(ctx context.Context, customer string) ([]mo
 			return nil, err
 		}
 		orders = append(orders, orderRow)
+	}
+	if rows.Err() != nil {
+		return nil, err
 	}
 
 	return orders, nil

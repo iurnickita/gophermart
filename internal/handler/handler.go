@@ -22,7 +22,7 @@ func Serve(cfg config.Config, auth auth.Auth, service service.Service, zaplog *z
 
 	srv := &http.Server{
 		Addr:    cfg.ServerAddr,
-		Handler: router,
+		Handler: gzip.GzipMiddleware(logger.RequestLogMdlw(router, h.zaplog)),
 	}
 
 	return srv.ListenAndServe()
@@ -46,13 +46,13 @@ func newHandler(auth auth.Auth, service service.Service, baseaddr string, zaplog
 
 func (h *handler) newRouter() *http.ServeMux {
 	mux := http.NewServeMux()
-	mux.HandleFunc("POST /api/user/register", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Register, h.zaplog)))
-	mux.HandleFunc("POST /api/user/login", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Login, h.zaplog)))
-	mux.HandleFunc("POST /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostOrder), h.zaplog)))
-	mux.HandleFunc("GET /api/user/orders", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetOrder), h.zaplog)))
-	mux.HandleFunc("GET /api/user/balance", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetBalance), h.zaplog)))
-	mux.HandleFunc("POST /api/user/balance/withdraw", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.PostWithdraw), h.zaplog)))
-	mux.HandleFunc("GET /api/user/withdrawals", gzip.GzipMiddleware(logger.RequestLogMdlw(h.auth.Middleware(h.GetWithdrawals), h.zaplog)))
+	mux.HandleFunc("POST /api/user/register", h.auth.Register)
+	mux.HandleFunc("POST /api/user/login", h.auth.Login)
+	mux.HandleFunc("POST /api/user/orders", h.auth.Middleware(h.PostOrder))
+	mux.HandleFunc("GET /api/user/orders", h.auth.Middleware(h.GetOrder))
+	mux.HandleFunc("GET /api/user/balance", h.auth.Middleware(h.GetBalance))
+	mux.HandleFunc("POST /api/user/balance/withdraw", h.auth.Middleware(h.PostWithdraw))
+	mux.HandleFunc("GET /api/user/withdrawals", h.auth.Middleware(h.GetWithdrawals))
 
 	return mux
 }
@@ -68,7 +68,7 @@ func (h *handler) PostOrder(w http.ResponseWriter, r *http.Request) {
 
 	order := model.PurchaseOrder{Number: string(number),
 		Data: model.PurchaseOrderData{Customer: userCode}}
-	err = h.service.PostOrder(order)
+	err = h.service.PostOrder(r.Context(), order)
 	if err != nil {
 		switch err {
 		case service.ErrInsufficientData:
@@ -97,7 +97,7 @@ type GetOrderJSONResponse struct {
 func (h *handler) GetOrder(w http.ResponseWriter, r *http.Request) {
 	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
-	orders, err := h.service.GetOrder(userCode)
+	orders, err := h.service.GetOrder(r.Context(), userCode)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -132,7 +132,7 @@ type GetBalanceJSONResponse struct {
 func (h *handler) GetBalance(w http.ResponseWriter, r *http.Request) {
 	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
-	balance, err := h.service.GetBalance(userCode)
+	balance, err := h.service.GetBalance(r.Context(), userCode)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -174,7 +174,7 @@ func (h *handler) PostWithdraw(w http.ResponseWriter, r *http.Request) {
 	order := model.PurchaseOrder{
 		Number: withdrawJSON.Order,
 		Data:   model.PurchaseOrderData{Customer: userCode}}
-	err = h.service.PostWithdraw(order, h.pointsInput(withdrawJSON.Sum))
+	err = h.service.PostWithdraw(r.Context(), order, h.pointsInput(withdrawJSON.Sum))
 	if err != nil {
 		switch err {
 		case service.ErrInsufficientFunds:
@@ -197,7 +197,7 @@ type GetWithdrawalsJSONResponse struct {
 func (h *handler) GetWithdrawals(w http.ResponseWriter, r *http.Request) {
 	userCode := r.Header.Get(auth.HeaderUserCodeKey)
 
-	withdrawals, err := h.service.GetWithdrawals(userCode)
+	withdrawals, err := h.service.GetWithdrawals(r.Context(), userCode)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
